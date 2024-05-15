@@ -1,45 +1,38 @@
+import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
-const mongo = require('mongodb');
-const sha1 = require('sha1');
+import sha1 from 'sha1';
 
+class UsersController {
+    static async postNew(req, res) {
+        const { email, password } = req.body;
 
-class UsersController{
-    static async postNew(request, response){
-        //await dbClient.db.collection('users').remove()
-        if(!request.body.email){
-            return response.status(400).send({"error": "Missing email"})
+        if (!email) {
+            res.status(400).json({ error: 'Missing email' });
+            return;
         }
-        if(!request.body.password){
-            return response.status(400).send({"error": "Missing password"})
-        }
-        if(await dbClient.db.collection('users').findOne({email: request.body.email})){
-            return response.status(400).send({"error": "Already exist"})
-        }
-        const newUser = await dbClient.db.collection('users').insertOne({email: request.body.email, password: sha1(request.body.password)})
-        console.log({ "id": newUser.insertedId, "email": request.body.email})
-        return response.status(201).send({"id": newUser.insertedId, "email": request.body.email})
-    }
 
-    static getMe(request, response) {
-        const token = request.headers['x-token']
-        const key = `auth_${token}`
-        console.log('key: '+key)
-        let userId;
-        redisClient.get(key).then((result) => {
-            if (!result){
-                return response.status(401).send('error: Unauthorized')
-            }
-            userId = result
-        })
-        dbClient.db.collection('users').findOne({userId}, (err, result) => {
-            if (!result){
-                return response.status(401).send('error: Unauthorized')
-            }
-            return response.status(200).send({id:userId,email:result.email})
-        })
+        if (!password) {
+            res.status(400).json({ error: 'Missing password' });
+            return;
+        }
 
+        const usersCollection = dbClient.client.db().collection('users');
+        const user = await usersCollection.findOne({ email });
+
+        if (user) {
+            res.status(400).json({ error: 'Already exist' });
+            return;
+        }
+
+        const newUser = {
+            email,
+            password: sha1(password)
+        };
+
+        const result = await usersCollection.insertOne(newUser);
+
+        res.status(201).json({ id: result.insertedId, email });
     }
 }
 
-module.exports = UsersController
+export default UsersController;
